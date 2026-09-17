@@ -1,9 +1,12 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { Header, Footer } from "@/components/site-chrome";
 import { STATIC_SUB_COUNTIES } from "@/lib/location-data";
+import { saveSearchQuery } from "@/lib/marketplace.functions";
+import { useServerFn } from "@tanstack/react-start";
+import { toast } from "sonner";
 import {
   Search,
   MapPin,
@@ -15,6 +18,15 @@ import {
   ShoppingBag,
   Wrench,
   Users,
+  Bookmark,
+  Sparkles,
+  Flame,
+  Camera,
+  Grid,
+  Map,
+  ArrowUpDown,
+  Bell,
+  Eye,
 } from "lucide-react";
 
 // Define the search validator schema using zod
@@ -29,6 +41,8 @@ const searchSchema = z.object({
   type: z.string().optional().catch(""),
   minPrice: z.number().optional().catch(undefined),
   maxPrice: z.number().optional().catch(undefined),
+  sort: z.enum(["newest", "price_asc", "price_desc", "distance"]).optional().catch("newest"),
+  view: z.enum(["grid", "explorer"]).optional().catch("grid"),
 });
 
 
@@ -40,7 +54,7 @@ export const Route = createFileRoute("/browse")({
       { title: "Browse Marketplace – Sokonyumbani" },
       {
         name: "description",
-        content: "Browse home appliances, building materials, and services for sale across Kenya.",
+        content: "Browse home appliances, building materials, vehicles, and services for sale across Kenya.",
       },
     ],
   }),
@@ -51,6 +65,11 @@ type ListingRow = {
   title: string;
   price: number;
   image_url: string | null;
+  images?: string[] | null;
+  specs?: Record<string, any> | null;
+  promotion_tier?: string | null;
+  views_count?: number | null;
+  distance_km?: number | null;
   town: string | null;
   county_id: number | null;
   listing_type: "sale" | "hire" | "service" | "donation" | null;
@@ -109,12 +128,29 @@ function collectDescendantIds(rootId: number, all: Category[]): number[] {
 type PrevSearch = {
   q?: string; category?: string; type?: string; listing_type?: "sale" | "hire" | "service" | "donation";
   county?: number; sub_county?: number; subcounty?: number; ward?: number;
-  minPrice?: number; maxPrice?: number;
+  minPrice?: number; maxPrice?: number; sort?: "newest" | "price_asc" | "price_desc" | "distance";
+  view?: "grid" | "explorer";
 };
 
+const POPULAR_SEARCH_SUGGESTIONS = [
+  "Toyota Probox",
+  "iPhone 13",
+  "Sufuria Set",
+  "Water Tank 1000L",
+  "Plumbing Services",
+  "Smart TV 43 inch",
+  "Cement 50kg",
+  "Bedsitter",
+  "Electrician",
+  "Solar Panel 300W",
+  "Motorcycle Boxer",
+  "Fridge Samsung",
+];
+
 function Browse() {
-  const { q, category, county, sub_county, subcounty, ward, listing_type, type, minPrice, maxPrice } = Route.useSearch();
+  const { q, category, county, sub_county, subcounty, ward, listing_type, type, minPrice, maxPrice, sort, view } = Route.useSearch();
   const navigate = useNavigate();
+  const doSaveSearch = useServerFn(saveSearchQuery);
 
   const [items, setItems] = useState<ListingRow[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -126,6 +162,7 @@ function Browse() {
 
   // Filter input states
   const [searchVal, setSearchVal] = useState(q || "");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const [minPriceVal, setMinPriceVal] = useState(minPrice !== undefined ? String(minPrice) : "");
   const [maxPriceVal, setMaxPriceVal] = useState(maxPrice !== undefined ? String(maxPrice) : "");
   const [selectedCounty, setSelectedCounty] = useState<string>(
@@ -135,6 +172,9 @@ function Browse() {
     sub_county !== undefined ? String(sub_county) : "",
   );
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [savingSearch, setSavingSearch] = useState(false);
 
   // Fetch static categories, counties and sub_counties once
   useEffect(() => {
@@ -177,14 +217,12 @@ function Browse() {
         const normalized = rows.map((r) => ({
           id: r.id,
           county_id: r.county_id,
-          // prefer explicit sub_county_id, fall back to subcounty_id if present
           sub_county_id: r.sub_county_id ?? r.subcounty_id ?? null,
           name: r.name,
         })) as Ward[];
         setWards(normalized);
       });
   }, []);
-
 
   // Sync state with URL updates
   useEffect(() => {
@@ -193,7 +231,7 @@ function Browse() {
     setMaxPriceVal(maxPrice !== undefined ? String(maxPrice) : "");
     setSelectedCounty(county !== undefined ? String(county) : "");
     setSelectedSubCounty(sub_county !== undefined ? String(sub_county) : "");
-  }, [q, category, county, sub_county, subcounty, ward, listing_type, type, minPrice, maxPrice]);
+  }, [q, category, county, sub_county, subcounty, ward, listing_type, type, minPrice, maxPrice, sort, view]);
 
   // Main search query execution
   useEffect(() => {
@@ -202,7 +240,7 @@ function Browse() {
       try {
         let query = supabase
           .from("listings")
-          .select("id,title,price,image_url,town,county_id,listing_type,work_rate_type,landmark,donation_recipient,created_at")
+          .select("id,title,price,image_url,images,specs,promotion_tier,views_count,distance_km,town,county_id,listing_type,work_rate_type,landmark,donation_recipient,created_at")
           .eq("status", "active");
 
         if (q) {
@@ -227,15 +265,12 @@ function Browse() {
           query = query.lte("price", maxPrice);
         }
 
-        // Handle category hierarchy — works for any depth (group, sub-category,
-        // or the most specific item/specialty) by collecting every descendant id.
         if (category) {
           const cat = categories.find((c) => c.slug === category);
           if (cat) {
             const allIds = [cat.id, ...collectDescendantIds(cat.id, categories)];
             query = query.in("category_id", allIds);
           } else {
-            // Categories list isn't loaded yet — resolve via DB directly.
             const { data: dbCat } = await supabase
               .from("categories")
               .select("id,parent_id")
@@ -254,8 +289,27 @@ function Browse() {
           }
         }
 
-        const { data } = await query.order("created_at", { ascending: false }).limit(80);
-        setItems((data as ListingRow[]) ?? []);
+        // Apply sort
+        if (sort === "price_asc") {
+          query = query.order("price", { ascending: true });
+        } else if (sort === "price_desc") {
+          query = query.order("price", { ascending: false });
+        } else if (sort === "distance") {
+          query = query.order("distance_km", { ascending: true });
+        } else {
+          query = query.order("created_at", { ascending: false });
+        }
+
+        const { data } = await query.limit(80);
+        const rows = (data as ListingRow[]) ?? [];
+
+        // Priority sort: Promoted items (featured, urgent) ranked to the top
+        const prioritized = [...rows].sort((a, b) => {
+          const tierRank = (t?: string | null) => (t === "featured" ? 3 : t === "urgent" ? 2 : t === "boosted" ? 1 : 0);
+          return tierRank(b.promotion_tier) - tierRank(a.promotion_tier);
+        });
+
+        setItems(prioritized);
       } catch (err) {
         console.error("Error fetching listings:", err);
       } finally {
@@ -395,13 +449,26 @@ function Browse() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             value={searchVal}
-            onChange={(e) => setSearchVal(e.target.value)}
+            onChange={(e) => { setSearchVal(e.target.value); setShowSuggestions(e.target.value.length > 0); }}
+            onFocus={() => setShowSuggestions(searchVal.length > 0)}
+            onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") applyFilters({ q: searchVal });
+              if (e.key === "Enter") { setShowSuggestions(false); applyFilters({ q: searchVal }); }
+              if (e.key === "Escape") setShowSuggestions(false);
             }}
             placeholder="Search solar panels, fridges, plumbing, TVs..."
             className="w-full rounded-xl border border-border/70 bg-card pl-10 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-primary shadow-sm text-xs md:text-sm"
           />
+          {showSuggestions && (
+            <div className="absolute z-30 left-0 right-0 top-full mt-1 bg-card border border-border/60 rounded-xl shadow-lg overflow-hidden">
+              {POPULAR_SEARCH_SUGGESTIONS.filter(s => s.toLowerCase().includes(searchVal.toLowerCase())).slice(0, 6).map(s => (
+                <button key={s} onMouseDown={() => { setSearchVal(s); setShowSuggestions(false); applyFilters({ q: s }); }}
+                  className="w-full text-left px-4 py-2 text-xs hover:bg-muted flex items-center gap-2">
+                  <Search className="h-3 w-3 text-muted-foreground" />{s}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Type tabs */}
@@ -439,6 +506,69 @@ function Browse() {
             ward={ward}
             onPick={(patch) => navigate({ to: "/browse", search: (prev: PrevSearch) => ({ ...prev, ...patch }) })}
           />
+        )}
+
+        {/* Sort + Save Search toolbar */}
+        <div className="flex items-center gap-2 mb-3 flex-wrap">
+          <div className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-2.5 py-1.5 text-xs">
+            <ArrowUpDown className="h-3 w-3 text-muted-foreground" />
+            <select
+              value={sort || "newest"}
+              onChange={(e) => navigate({ to: "/browse", search: (prev: PrevSearch) => ({ ...prev, sort: e.target.value as any }) })}
+              className="bg-transparent outline-none text-xs font-semibold cursor-pointer"
+            >
+              <option value="newest">Newest First</option>
+              <option value="price_asc">Price: Low to High</option>
+              <option value="price_desc">Price: High to Low</option>
+              <option value="distance">Nearest First</option>
+            </select>
+          </div>
+          <button
+            onClick={() => setSaveModalOpen(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-card px-2.5 py-1.5 text-xs font-semibold hover:border-primary hover:text-primary transition"
+          >
+            <Bookmark className="h-3 w-3" /> Save Search
+          </button>
+          {items.length > 0 && !loading && (
+            <span className="text-[11px] text-muted-foreground ml-auto">{items.length} results</span>
+          )}
+        </div>
+
+        {/* Save Search Modal */}
+        {saveModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={() => setSaveModalOpen(false)}>
+            <div className="absolute inset-0 bg-black/50" />
+            <div className="relative bg-card rounded-2xl shadow-2xl p-6 w-full max-w-sm mx-4 animate-in fade-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+              <h3 className="text-base font-bold mb-1">Save this Search</h3>
+              <p className="text-xs text-muted-foreground mb-4">Give this search a name so you can quickly find it later in your dashboard.</p>
+              <input
+                autoFocus
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                onKeyDown={async e => { if (e.key === "Enter") { /* save */ } }}
+                placeholder={q ? `"${q}"` : "My saved search"}
+                className="w-full rounded-xl border border-border/70 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary mb-4"
+              />
+              <div className="flex gap-2">
+                <button onClick={() => setSaveModalOpen(false)} className="flex-1 rounded-xl border border-border py-2.5 text-sm font-semibold hover:bg-muted transition">Cancel</button>
+                <button
+                  disabled={savingSearch}
+                  onClick={async () => {
+                    setSavingSearch(true);
+                    try {
+                      await doSaveSearch({ data: { name: saveName || (q ? `"${q}"` : "Saved search"), query_params: { q, category, county, sub_county, listing_type, minPrice, maxPrice, sort } } });
+                      toast.success("Search saved! Find it in Dashboard → Saved Searches.");
+                      setSaveModalOpen(false); setSaveName("");
+                    } catch { toast.error("Sign in to save searches."); }
+                    finally { setSavingSearch(false); }
+                  }}
+                  className="flex-1 rounded-xl bg-primary text-white py-2.5 text-sm font-bold hover:bg-primary-dark transition disabled:opacity-60"
+                >
+                  {savingSearch ? "Saving…" : "Save"}
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Filter chips */}
@@ -733,6 +863,23 @@ function Browse() {
                               {typeInfo.label}
                             </span>
                           )}
+                          {/* Promoted badge */}
+                          {it.promotion_tier === "featured" && (
+                            <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-0.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-500 text-white shadow-sm">
+                              <Sparkles className="h-2.5 w-2.5" /> FEATURED
+                            </span>
+                          )}
+                          {it.promotion_tier === "urgent" && (
+                            <span className="absolute top-1.5 left-1.5 inline-flex items-center gap-0.5 text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-rose-600 text-white shadow-sm">
+                              <Flame className="h-2.5 w-2.5" /> URGENT
+                            </span>
+                          )}
+                          {/* Multi-photo badge */}
+                          {Array.isArray(it.images) && it.images.length > 1 && (
+                            <span className="absolute bottom-1.5 right-1.5 bg-black/60 backdrop-blur-sm text-white px-1.5 py-0.5 rounded text-[9px] flex items-center gap-0.5">
+                              <Camera className="h-2.5 w-2.5" /> {it.images.length}
+                            </span>
+                          )}
                           <div className="absolute bottom-1.5 left-1.5 bg-black/60 backdrop-blur-sm text-white px-1.5 py-0.5 rounded text-[9px] flex items-center gap-1">
                             <MapPin className="h-2.5 w-2.5" /> {it.town}
                           </div>
@@ -752,12 +899,19 @@ function Browse() {
                             </span>
                           )}
                         </div>
-                        <span className="text-[9px] text-muted-foreground">
-                          {new Date(it.created_at).toLocaleDateString(undefined, {
-                            month: "short",
-                            day: "numeric",
-                          })}
-                        </span>
+                        <div className="flex items-center gap-1.5 text-[9px] text-muted-foreground">
+                          {it.views_count !== undefined && it.views_count !== null && it.views_count > 0 && (
+                            <span className="flex items-center gap-0.5">
+                              <Eye className="h-2.5 w-2.5" /> {it.views_count}
+                            </span>
+                          )}
+                          <span>
+                            {new Date(it.created_at).toLocaleDateString(undefined, {
+                              month: "short",
+                              day: "numeric",
+                            })}
+                          </span>
+                        </div>
                       </div>
                     </Link>
                   );

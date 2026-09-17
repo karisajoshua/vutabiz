@@ -2,14 +2,15 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { supabase } from "@/integrations/supabase/client";
-import { computeAdFee, createListing, payListingAd } from "@/lib/marketplace.functions";
+import { computeAdFee, createListing, payListingAd, initiateDarajaStkPush, payWithWallet } from "@/lib/marketplace.functions";
 import { Header, Footer } from "@/components/site-chrome";
 import { toast } from "sonner";
-import { Loader2, CheckCircle2, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, CheckCircle2, ChevronLeft, ChevronRight, Sparkles, Flame, X, UploadCloud, Smartphone, Wallet } from "lucide-react";
 import { STATIC_SUB_COUNTIES } from "@/lib/location-data";
 import { SKILL_CATEGORIES } from "@/lib/skills-data";
 import { CATEGORY_TREE } from "@/lib/category-tree";
 import { itemSlug, specialtySlug } from "@/lib/slug";
+import { CATEGORY_SPECS, getSpecCategoryForSlug } from "@/lib/category-specs";
 
 export const Route = createFileRoute("/_authenticated/sell")({ component: SellPage });
 
@@ -57,6 +58,8 @@ function SellPage() {
   const compute = useServerFn(computeAdFee);
   const create = useServerFn(createListing);
   const pay = useServerFn(payListingAd);
+  const doStkPush = useServerFn(initiateDarajaStkPush);
+  const doPayWallet = useServerFn(payWithWallet);
 
   const [cats, setCats] = useState<Cat[]>([]);
   const [counties, setCounties] = useState<County[]>([]);
@@ -71,6 +74,12 @@ function SellPage() {
   const [desc, setDesc] = useState("");
   const [price, setPrice] = useState<number>(1000);
   const [categoryId, setCategoryId] = useState<number | "">("");
+
+  // Jiji-style Multi-photo gallery & specs
+  const [images, setImages] = useState<string[]>([]);
+  const [specs, setSpecs] = useState<Record<string, any>>({});
+  const [promotionTier, setPromotionTier] = useState<"standard" | "boosted" | "urgent" | "featured">("standard");
+
   // Cascading category picker for sale/hire/donation ads — Category → Sub-category → Item,
   // exactly mirroring the Buy/Hire (Browse) page's category tree. The chosen item becomes
   // the ad title, the same way Jiji derives a listing's title from its category path.
@@ -110,6 +119,10 @@ function SellPage() {
   const [uploading, setUploading] = useState(false);
   const [createdId, setCreatedId] = useState<string | null>(null);
   const [mpesa, setMpesa] = useState("");
+  const [stkPhone, setStkPhone] = useState("");
+  const [pushingStk, setPushingStk] = useState(false);
+  const [payingWithWallet, setPayingWithWallet] = useState(false);
+  const [myWalletBalance, setMyWalletBalance] = useState<number>(0);
 
   useEffect(() => {
     supabase
@@ -225,23 +238,42 @@ function SellPage() {
 
   const togglePay = (m: string) => setPayMethods((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
 
-  async function handleImageUpload(file: File) {
+  async function handleImageUpload(files: FileList | null) {
+    if (!files || files.length === 0) return;
     const { data: u } = await supabase.auth.getUser();
     if (!u.user) return;
+    if (images.length + files.length > 8) {
+      toast.error("Maximum 8 images allowed per ad.");
+      return;
+    }
     setUploading(true);
     try {
-      const ext = file.name.split(".").pop() || "jpg";
-      const path = `${u.user.id}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("listing-images").upload(path, file, { upsert: false });
-      if (error) throw error;
-      const { data: signed } = await supabase.storage.from("listing-images").createSignedUrl(path, 60 * 60 * 24 * 365);
-      setImageUrl(signed?.signedUrl || "");
-      toast.success("Image uploaded");
+      const newUrls: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const ext = file.name.split(".").pop() || "jpg";
+        const path = `${u.user.id}/${Date.now()}_${i}.${ext}`;
+        const { error } = await supabase.storage.from("listing-images").upload(path, file, { upsert: false });
+        if (error) throw error;
+        const { data: signed } = await supabase.storage.from("listing-images").createSignedUrl(path, 60 * 60 * 24 * 365);
+        if (signed?.signedUrl) newUrls.push(signed.signedUrl);
+      }
+      setImages((prev) => [...prev, ...newUrls]);
+      if (!imageUrl && newUrls[0]) setImageUrl(newUrls[0]);
+      toast.success(`${newUrls.length} image(s) uploaded.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Upload failed");
     } finally {
       setUploading(false);
     }
+  }
+
+  function handleRemoveImage(idx: number) {
+    setImages((prev) => {
+      const updated = prev.filter((_, i) => i !== idx);
+      setImageUrl(updated[0] || "");
+      return updated;
+    });
   }
 
   // Validate the current step so users can't skip required fields
@@ -289,7 +321,10 @@ function SellPage() {
           ward_id: wardId ? Number(wardId) : null,
           town,
           landmark: landmark || null,
-          image_url: imageUrl || null,
+          image_url: images[0] || imageUrl || null,
+          images: images.length > 0 ? images : imageUrl ? [imageUrl] : [],
+          specs: Object.keys(specs).length > 0 ? specs : undefined,
+          promotion_tier: promotionTier,
           distance_km: distance,
           risk,
           duration_days: days,
@@ -315,11 +350,60 @@ function SellPage() {
         navigate({ to: "/thank-you", search: { url: `/listing/${res.id}`, listing: res.id } });
         return;
       }
-      toast.success("Listing created. Please pay the ad fee to publish.");
+      toast.success("Listing created. Please choose payment method to publish.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed");
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleTriggerStk() {
+    if (!createdId || !stkPhone) {
+      toast.error("Please enter your M-Pesa phone number.");
+      return;
+    }
+    setPushingStk(true);
+    try {
+      const res = await doStkPush({
+        data: {
+          phone: stkPhone,
+          amount: fee || 100,
+          purpose: "ad_fee",
+          listing_id: createdId,
+        },
+      });
+      toast.success(res.customerMessage || "STK PIN prompt sent to your phone!");
+      if (res.isSimulated) {
+        toast.info("Dev simulation: Auto-verifying in 3s...");
+        setTimeout(() => {
+          navigate({ to: "/thank-you", search: { url: `/listing/${createdId}`, listing: createdId } });
+        }, 3000);
+      }
+    } catch (err: any) {
+      toast.error(err.message || "STK push failed.");
+    } finally {
+      setPushingStk(false);
+    }
+  }
+
+  async function handlePayWithWallet() {
+    if (!createdId) return;
+    setPayingWithWallet(true);
+    try {
+      await doPayWallet({
+        data: {
+          listing_id: createdId,
+          amount: fee || 100,
+          purpose: `Ad fee for ${title}`,
+        },
+      });
+      toast.success("Paid successfully using wallet balance!");
+      navigate({ to: "/thank-you", search: { url: `/listing/${createdId}`, listing: createdId } });
+    } catch (err: any) {
+      toast.error(err.message || "Wallet payment failed.");
+    } finally {
+      setPayingWithWallet(false);
     }
   }
 
@@ -467,6 +551,49 @@ function SellPage() {
                           </div>
                         )}
 
+                        {/* Dynamic Category Specs (Jiji-style) */}
+                        {(() => {
+                          const specCat = getSpecCategoryForSlug(subCategorySlug || groupSlug || itemLabel);
+                          if (!specCat || !CATEGORY_SPECS[specCat]) return null;
+                          const cfg = CATEGORY_SPECS[specCat];
+                          return (
+                            <div className="mt-3 rounded-xl border border-border/80 bg-muted/20 p-3.5 space-y-2.5">
+                              <div className="text-[11px] font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                                <Sparkles className="h-3.5 w-3.5" /> {cfg.name} (Key Specifications)
+                              </div>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                                {cfg.fields.map((f) => (
+                                  <div key={f.key}>
+                                    <div className="text-[10px] font-semibold text-muted-foreground mb-1 uppercase tracking-wide">
+                                      {f.label} {f.unit ? `(${f.unit})` : ""}
+                                    </div>
+                                    {f.type === "select" ? (
+                                      <select
+                                        value={specs[f.key] || ""}
+                                        onChange={(e) => setSpecs((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                                        className="w-full rounded-lg border border-input bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-primary"
+                                      >
+                                        <option value="">Select {f.label}</option>
+                                        {f.options?.map((opt) => (
+                                          <option key={opt} value={opt}>{opt}</option>
+                                        ))}
+                                      </select>
+                                    ) : (
+                                      <input
+                                        type={f.type === "number" ? "number" : "text"}
+                                        value={specs[f.key] || ""}
+                                        onChange={(e) => setSpecs((prev) => ({ ...prev, [f.key]: e.target.value }))}
+                                        placeholder={f.placeholder}
+                                        className="w-full rounded-lg border border-input bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-primary"
+                                      />
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })()}
+
                         <Field label="Description" v={desc} on={setDesc} textarea />
                         {listingType !== "donation" ? (
                           <NumField label={listingType === "hire" ? "Rental price (KSh)" : "Price (KSh)"} v={price} on={setPrice} required />
@@ -504,17 +631,49 @@ function SellPage() {
                 {/* ── STEP 3 ─────────────────────────────────────────── */}
                 {step === 3 && (
                   <>
+                    {/* Multi-Photo Uploader (Up to 8) */}
                     <div>
-                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-1.5">Image {listingType === "service" ? "(optional)" : ""}</div>
-                      <div className="flex items-center gap-2.5">
-                        <input type="file" accept="image/*" disabled={uploading}
-                          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); }}
-                          className="text-xs" />
-                        {uploading && <span className="text-xs text-muted-foreground">Uploading…</span>}
-                        {imageUrl && !uploading && (
-                          <img src={imageUrl} alt="preview" className="h-12 w-12 rounded object-cover ring-1 ring-black/10" />
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                          Photos (Up to 8) {listingType === "service" ? "(optional)" : ""}
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">{images.length}/8 uploaded</span>
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-2 mb-2">
+                        {images.map((img, idx) => (
+                          <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-border group">
+                            <img src={img} alt="" className="w-full h-full object-cover" />
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveImage(idx)}
+                              className="absolute top-1 right-1 bg-black/60 text-white rounded-full p-1 opacity-80 hover:opacity-100 transition"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                            {idx === 0 && (
+                              <span className="absolute bottom-1 left-1 bg-primary text-white text-[8px] font-bold px-1 rounded">
+                                Cover
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                        {images.length < 8 && (
+                          <label className="aspect-square rounded-lg border-2 border-dashed border-border/80 flex flex-col items-center justify-center p-2 text-center cursor-pointer hover:border-primary/50 transition">
+                            <UploadCloud className="h-5 w-5 text-muted-foreground mb-1" />
+                            <span className="text-[9px] font-semibold text-muted-foreground">Add photo</span>
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*"
+                              disabled={uploading}
+                              onChange={(e) => handleImageUpload(e.target.files)}
+                              className="hidden"
+                            />
+                          </label>
                         )}
                       </div>
+                      {uploading && <div className="text-xs text-muted-foreground animate-pulse">Uploading photos...</div>}
                     </div>
 
                     {(listingType === "sale" || listingType === "hire") && (
@@ -537,6 +696,38 @@ function SellPage() {
                           {PAYMENT_OPTIONS.map((p) => (
                             <button type="button" key={p} onClick={() => togglePay(p)}
                               className={`text-[11px] px-2.5 py-1 rounded-full border ${payMethods.includes(p) ? "bg-primary text-white border-primary" : "bg-white border-border"}`}>{p}</button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Jiji Promotion Tier Selector */}
+                    {listingType !== "donation" && (
+                      <div className="pt-2 border-t border-border space-y-1.5">
+                        <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Boost Your Ad Visibility</div>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          {[
+                            { id: "standard", label: "Standard", extra: "+KSh 0", desc: "Regular listing", icon: null },
+                            { id: "boosted", label: "Boosted", extra: "+KSh 100", desc: "Top of category", icon: Sparkles },
+                            { id: "urgent", label: "Urgent", extra: "+KSh 150", desc: "Red urgent badge", icon: Flame },
+                            { id: "featured", label: "Featured", extra: "+KSh 200", desc: "Homepage banner", icon: Sparkles },
+                          ].map((t) => (
+                            <button
+                              key={t.id}
+                              type="button"
+                              onClick={() => setPromotionTier(t.id as any)}
+                              className={`p-2 rounded-xl border text-left transition cursor-pointer ${
+                                promotionTier === t.id
+                                  ? "border-primary bg-primary/10 ring-1 ring-primary"
+                                  : "border-border hover:border-primary/40 bg-card"
+                              }`}
+                            >
+                              <div className="text-xs font-bold flex items-center justify-between">
+                                <span>{t.label}</span>
+                                <span className="text-[10px] text-primary">{t.extra}</span>
+                              </div>
+                              <div className="text-[10px] text-muted-foreground mt-0.5">{t.desc}</div>
+                            </button>
                           ))}
                         </div>
                       </div>
@@ -613,21 +804,80 @@ function SellPage() {
               </form>
             </>
           ) : (
-            <div className="mt-4 bg-card rounded-xl shadow ring-1 ring-black/5 p-4">
+            <div className="mt-4 bg-card rounded-xl shadow ring-1 ring-black/5 p-5 space-y-4">
               <div className="flex items-center gap-2 text-primary-dark">
-                <CheckCircle2 className="h-5 w-5" />
+                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                 <h2 className="text-base font-bold">Listing saved — complete payment</h2>
               </div>
-              <p className="mt-1.5 text-xs text-muted-foreground">
-                Pay <b>KSh {fee}</b> via M-Pesa Paybill <b>247247</b>, Account <b>{createdId.slice(0, 8)}</b>, then paste the M-Pesa code below.
+              <p className="text-xs text-muted-foreground">
+                Total Ad Fee: <b className="text-primary-dark text-sm">KSh {fee}</b> (includes {promotionTier} boost)
               </p>
-              <div className="mt-3 flex gap-2">
-                <input value={mpesa} onChange={(e) => setMpesa(e.target.value.toUpperCase())} placeholder="e.g. QK7XX8Y9ZA"
-                  className="flex-1 rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary" />
-                <button disabled={loading || !mpesa} onClick={payAd}
-                  className="rounded-lg bg-primary-dark text-white px-4 py-2 text-sm font-bold disabled:opacity-60">Confirm payment</button>
+
+              {/* Option 1: Instant M-Pesa STK Push */}
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-2">
+                <div className="text-xs font-bold text-primary-dark flex items-center gap-1.5">
+                  <Smartphone className="h-4 w-4 text-primary" /> Instant M-Pesa Prompt (STK Push)
+                </div>
+                <p className="text-[11px] text-muted-foreground">Enter your Safaricom number to receive a PIN prompt on your phone.</p>
+                <div className="flex gap-2">
+                  <input
+                    type="tel"
+                    value={stkPhone}
+                    onChange={(e) => setStkPhone(e.target.value)}
+                    placeholder="e.g. 0712345678"
+                    className="flex-1 rounded-lg border border-input bg-white px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-primary font-semibold"
+                  />
+                  <button
+                    disabled={pushingStk || !stkPhone}
+                    onClick={handleTriggerStk}
+                    className="rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold transition disabled:opacity-60 cursor-pointer"
+                  >
+                    {pushingStk ? "Sending prompt..." : "Send M-Pesa Prompt"}
+                  </button>
+                </div>
               </div>
-              <Link to="/dashboard" className="mt-3 inline-block text-xs text-primary underline">Skip for now</Link>
+
+              {/* Option 2: Pay with Wallet */}
+              <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Wallet className="h-4 w-4 text-primary" /> Pay with VutaBiz Wallet
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5">Instant activation. No transaction fees.</div>
+                </div>
+                <button
+                  disabled={payingWithWallet}
+                  onClick={handlePayWithWallet}
+                  className="rounded-lg bg-primary text-white px-3 py-2 text-xs font-bold hover:bg-primary-dark transition disabled:opacity-60 cursor-pointer"
+                >
+                  {payingWithWallet ? "Processing..." : "Pay from Wallet"}
+                </button>
+              </div>
+
+              {/* Option 3: Manual Paybill */}
+              <div className="border-t border-border pt-3 space-y-2">
+                <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Or Pay Manually via Paybill</div>
+                <p className="text-xs text-muted-foreground">
+                  Paybill: <b>247247</b>, Account: <b>{createdId.slice(0, 8)}</b>, then enter the M-Pesa code:
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    value={mpesa}
+                    onChange={(e) => setMpesa(e.target.value.toUpperCase())}
+                    placeholder="e.g. QK7XX8Y9ZA"
+                    className="flex-1 rounded-lg border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary uppercase font-mono"
+                  />
+                  <button
+                    disabled={loading || !mpesa}
+                    onClick={payAd}
+                    className="rounded-lg bg-primary-dark text-white px-4 py-2 text-sm font-bold disabled:opacity-60 cursor-pointer"
+                  >
+                    Confirm
+                  </button>
+                </div>
+              </div>
+
+              <Link to="/dashboard" className="inline-block text-xs text-primary underline">Skip payment for now (saved as draft)</Link>
             </div>
           )}
         </div>

@@ -100,6 +100,12 @@ export type Database = {
           updated_at: string
           ward_id: number | null
           work_rate_type: string | null
+          images: string[]
+          specs: Json
+          promotion_tier: string
+          promoted_until: string | null
+          views_count: number
+          contact_clicks_count: number
         }
         Insert: {
           ad_expires_at?: string | null
@@ -107,6 +113,7 @@ export type Database = {
           ad_paid?: boolean
           category_id?: number | null
           contact_phone?: string | null
+          contact_clicks_count?: number
           county_id?: number | null
           created_at?: string
           description?: string | null
@@ -138,6 +145,11 @@ export type Database = {
           updated_at?: string
           ward_id?: number | null
           work_rate_type?: string | null
+          images?: string[]
+          specs?: Json
+          promotion_tier?: string
+          promoted_until?: string | null
+          views_count?: number
         }
         Update: {
           ad_expires_at?: string | null
@@ -176,6 +188,12 @@ export type Database = {
           updated_at?: string
           ward_id?: number | null
           work_rate_type?: string | null
+          images?: string[]
+          specs?: Json
+          promotion_tier?: string
+          promoted_until?: string | null
+          views_count?: number
+          contact_clicks_count?: number
         }
         Relationships: [
           {
@@ -307,6 +325,19 @@ export type Database = {
           town: string | null
           updated_at: string
           ward_id: number | null
+          is_phone_verified: boolean
+          verification_status: string
+          id_document_url: string | null
+          kra_pin: string | null
+          wallet_balance: number
+          subscription_tier: string
+          subscription_expires_at: string | null
+          shop_banner_url: string | null
+          shop_bio: string | null
+          business_hours: string | null
+          referral_code: string | null
+          referred_by: string | null
+          total_referrals_count: number
         }
         Insert: {
           avatar_url?: string | null
@@ -321,6 +352,19 @@ export type Database = {
           town?: string | null
           updated_at?: string
           ward_id?: number | null
+          is_phone_verified?: boolean
+          verification_status?: string
+          id_document_url?: string | null
+          kra_pin?: string | null
+          wallet_balance?: number
+          subscription_tier?: string
+          subscription_expires_at?: string | null
+          shop_banner_url?: string | null
+          shop_bio?: string | null
+          business_hours?: string | null
+          referral_code?: string | null
+          referred_by?: string | null
+          total_referrals_count?: number
         }
         Update: {
           avatar_url?: string | null
@@ -335,6 +379,19 @@ export type Database = {
           town?: string | null
           updated_at?: string
           ward_id?: number | null
+          is_phone_verified?: boolean
+          verification_status?: string
+          id_document_url?: string | null
+          kra_pin?: string | null
+          wallet_balance?: number
+          subscription_tier?: string
+          subscription_expires_at?: string | null
+          shop_banner_url?: string | null
+          shop_bio?: string | null
+          business_hours?: string | null
+          referral_code?: string | null
+          referred_by?: string | null
+          total_referrals_count?: number
         }
         Relationships: [
           {
@@ -433,6 +490,396 @@ export type Database = {
           },
         ]
       }
+      reviews: {
+        Row: {
+          id: string
+          listing_id: string
+          seller_id: string
+          reviewer_id: string
+          rating: number
+          comment: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          listing_id: string
+          seller_id: string
+          reviewer_id: string
+          rating: number
+          comment?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          listing_id?: string
+          seller_id?: string
+          reviewer_id?: string
+          rating?: number
+          comment?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      reports: {
+        Row: {
+          id: string
+          listing_id: string | null
+          reported_user_id: string | null
+          reporter_id: string
+          reason: string
+          details: string | null
+          status: string
+          admin_notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          listing_id?: string | null
+          reported_user_id?: string | null
+          reporter_id: string
+          reason: string
+          details?: string | null
+          status?: string
+          admin_notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          listing_id?: string | null
+          reported_user_id?: string | null
+          reporter_id?: string
+          reason?: string
+          details?: string | null
+          status?: string
+          admin_notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      saved_searches: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          query_params: Json
+          notify_email: boolean
+          notify_in_app: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          query_params?: Json
+          notify_email?: boolean
+          notify_in_app?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          query_params?: Json
+          notify_email?: boolean
+          notify_in_app?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      conversations: {
+        Row: {
+          id: string
+          listing_id: string
+          buyer_id: string
+          seller_id: string
+          last_message: string | null
+          last_message_at: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          listing_id: string
+          buyer_id: string
+          seller_id: string
+          last_message?: string | null
+          last_message_at?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          listing_id?: string
+          buyer_id?: string
+          seller_id?: string
+          last_message?: string | null
+          last_message_at?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          id: string
+          conversation_id: string
+          sender_id: string
+          content: string
+          is_read: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          conversation_id: string
+          sender_id: string
+          content: string
+          is_read?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          conversation_id?: string
+          sender_id?: string
+          content?: string
+          is_read?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          id: string
+          user_id: string
+          type: string
+          title: string
+          message: string
+          link: string | null
+          is_read: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          type: string
+          title: string
+          message: string
+          link?: string | null
+          is_read?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          type?: string
+          title?: string
+          message?: string
+          link?: string | null
+          is_read?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
+      wallet_transactions: {
+        Row: {
+          id: string
+          user_id: string
+          amount: number
+          type: string
+          description: string
+          mpesa_ref: string | null
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          amount: number
+          type: string
+          description: string
+          mpesa_ref?: string | null
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          amount?: number
+          type?: string
+          description?: string
+          mpesa_ref?: string | null
+          status?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      orders: {
+        Row: {
+          id: string
+          listing_id: string
+          buyer_id: string
+          seller_id: string
+          amount: number
+          delivery_fee: number
+          total_amount: number
+          payment_method: string
+          payment_ref: string | null
+          courier_partner: string | null
+          tracking_number: string | null
+          delivery_address: string | null
+          delivery_status: string
+          escrow_status: string
+          released_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          listing_id: string
+          buyer_id: string
+          seller_id: string
+          amount: number
+          delivery_fee?: number
+          total_amount: number
+          payment_method?: string
+          payment_ref?: string | null
+          courier_partner?: string | null
+          tracking_number?: string | null
+          delivery_address?: string | null
+          delivery_status?: string
+          escrow_status?: string
+          released_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          listing_id?: string
+          buyer_id?: string
+          seller_id?: string
+          amount?: number
+          delivery_fee?: number
+          total_amount?: number
+          payment_method?: string
+          payment_ref?: string | null
+          courier_partner?: string | null
+          tracking_number?: string | null
+          delivery_address?: string | null
+          delivery_status?: string
+          escrow_status?: string
+          released_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      disputes: {
+        Row: {
+          id: string
+          order_id: string
+          raised_by: string
+          against_user_id: string
+          reason: string
+          evidence_url: string | null
+          status: string
+          admin_notes: string | null
+          created_at: string
+          resolved_at: string | null
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          raised_by: string
+          against_user_id: string
+          reason: string
+          evidence_url?: string | null
+          status?: string
+          admin_notes?: string | null
+          created_at?: string
+          resolved_at?: string | null
+        }
+        Update: {
+          id?: string
+          order_id?: string
+          raised_by?: string
+          against_user_id?: string
+          reason?: string
+          evidence_url?: string | null
+          status?: string
+          admin_notes?: string | null
+          created_at?: string
+          resolved_at?: string | null
+        }
+        Relationships: []
+      }
+      favorites: {
+        Row: {
+          id: string
+          user_id: string
+          listing_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          listing_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          listing_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      follows: {
+        Row: {
+          id: string
+          follower_id: string
+          seller_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          follower_id: string
+          seller_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          follower_id?: string
+          seller_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      referrals: {
+        Row: {
+          id: string
+          referrer_id: string
+          referred_user_id: string
+          reward_amount: number
+          status: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          referrer_id: string
+          referred_user_id: string
+          reward_amount?: number
+          status?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          referrer_id?: string
+          referred_user_id?: string
+          reward_amount?: number
+          status?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -455,6 +902,18 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      increment_listing_views: {
+        Args: {
+          _listing_id: string
+        }
+        Returns: void
+      }
+      increment_contact_clicks: {
+        Args: {
+          p_listing_id: string
+        }
+        Returns: void
       }
     }
     Enums: {

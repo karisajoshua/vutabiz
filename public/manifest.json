@@ -1,0 +1,34 @@
+﻿{
+  name: Sokonyumbani — Kenya Local Marketplace,
+  short_name: Sokonyumbani,
+  description: Buy & sell home appliances, furniture, vehicles, farm produce and services locally across Kenya.,
+  start_url: /,
+  display: standalone,
+  background_color: #ffffff,
+  theme_color: #16a34a,
+  orientation: portrait,
+  icons: [
+    {
+      src: /favicon.ico,
+      sizes: 64x64 32x32 24x24 16x16,
+      type: image/x-icon
+    }
+  ],
+  shortcuts: [
+    {
+      name: Post an Ad,
+      short_name: Sell,
+      url: /sell
+    },
+    {
+      name: Browse Items,
+      short_name: Browse,
+      url: /browse
+    },
+    {
+      name: My Dashboard,
+      short_name: Dashboard,
+      url: /dashboard
+    }
+  ]
+}

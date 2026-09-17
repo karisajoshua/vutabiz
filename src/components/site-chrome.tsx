@@ -12,9 +12,16 @@ import {
   ShieldAlert,
   HeartHandshake,
   MessagesSquare,
+  Bell,
+  Wallet,
+  ShieldCheck,
+  CheckCircle2,
+  Heart,
+  Globe,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useLanguage } from "@/lib/i18n";
 
 function Logo({ light = false }: { light?: boolean }) {
   return (
@@ -52,9 +59,13 @@ function Logo({ light = false }: { light?: boolean }) {
 }
 
 export function Header() {
+  const { lang, setLanguage, t } = useLanguage();
   const [email, setEmail] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [notifOpen, setNotifOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -65,6 +76,27 @@ export function Header() {
           .select("role")
           .eq("user_id", data.user.id);
         setIsAdmin(!!r?.some((x) => x.role === "admin"));
+
+        // Fetch wallet balance
+        const { data: prof } = await supabase
+          .from("profiles")
+          .select("wallet_balance")
+          .eq("id", data.user.id)
+          .maybeSingle();
+        if (prof) setWalletBalance(Number(prof.wallet_balance ?? 0));
+
+        // Fetch notifications
+        try {
+          const { data: notifs } = await supabase
+            .from("notifications")
+            .select("id, type, title, message, link, is_read, created_at")
+            .eq("user_id", data.user.id)
+            .order("created_at", { ascending: false })
+            .limit(6);
+          setNotifications(notifs ?? []);
+        } catch {
+          // ignore
+        }
       }
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
@@ -78,12 +110,15 @@ export function Header() {
     window.location.href = "/";
   };
 
+  const unreadNotifs = notifications.filter((n) => !n.is_read).length;
+
   const navLinks: { to: string; label: string; search?: Record<string, string> }[] = [
-    { to: "/", label: "Home" },
-    { to: "/browse", label: "Browse" },
-    { to: "/donations", label: "Donation Hub" },
-    ...(email ? [{ to: "/dashboard", label: "Dashboard" }] : []),
-    ...(isAdmin ? [{ to: "/admin", label: "Admin" }] : []),
+    { to: "/", label: lang === "sw" ? "Mwanzo" : "Home" },
+    { to: "/browse", label: lang === "sw" ? "Tazama Bidhaa" : "Browse" },
+    { to: "/donations", label: lang === "sw" ? "Michango" : "Donation Hub" },
+    { to: "/safety", label: t("safetyTips") },
+    ...(email ? [{ to: "/dashboard", label: t("myDashboard") }] : []),
+    ...(isAdmin ? [{ to: "/admin", label: t("adminPanel") }] : []),
   ];
 
   return (
@@ -101,8 +136,90 @@ export function Header() {
         </nav>
 
         {/* Desktop actions */}
-        <div className="hidden lg:flex items-center gap-2">
-          {/* Market Inquiry — single entry point; the /market hub decides sign-in vs public flow */}
+        <div className="hidden lg:flex items-center gap-2.5">
+          {email && (
+            <Link
+              to="/dashboard"
+              title="Your wallet credit balance"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-bold transition"
+            >
+              <Wallet className="h-3.5 w-3.5 text-emerald-300" />
+              <span>KSh {walletBalance.toLocaleString()}</span>
+            </Link>
+          )}
+
+          {email && (
+            <div className="relative">
+              <button
+                onClick={() => setNotifOpen(!notifOpen)}
+                aria-label="Notifications"
+                className="relative grid h-9 w-9 place-items-center rounded-full bg-white/10 hover:bg-white/20 transition"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadNotifs > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-extrabold text-white">
+                    {unreadNotifs}
+                  </span>
+                )}
+              </button>
+
+              {notifOpen && (
+                <div className="absolute right-0 mt-2 w-80 rounded-2xl bg-card text-foreground shadow-2xl border border-border/70 p-3 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="flex items-center justify-between border-b border-border/50 pb-2 px-1">
+                    <span className="font-bold text-xs uppercase tracking-wider text-muted-foreground">Notifications</span>
+                    <span className="text-[10px] text-muted-foreground">{unreadNotifs} unread</span>
+                  </div>
+                  <div className="divide-y divide-border/40 max-h-64 overflow-y-auto mt-1">
+                    {notifications.length === 0 ? (
+                      <p className="text-center py-6 text-xs text-muted-foreground">No new notifications</p>
+                    ) : (
+                      notifications.map((n) => (
+                        <div key={n.id} className="py-2.5 px-1 hover:bg-muted/40 rounded-lg transition text-xs">
+                          <div className="font-semibold text-foreground flex items-center justify-between">
+                            <span>{n.title}</span>
+                            {!n.is_read && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                          </div>
+                          <p className="text-muted-foreground text-[11px] mt-0.5 line-clamp-2">{n.message}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  <div className="border-t border-border/50 pt-2 text-center">
+                    <Link
+                      to="/dashboard"
+                      onClick={() => setNotifOpen(false)}
+                      className="text-xs font-semibold text-primary hover:underline"
+                    >
+                      View All in Dashboard
+                    </Link>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Favorites link */}
+          {email && (
+            <Link
+              to="/dashboard"
+              title="Your Saved Favorites"
+              className="grid h-9 w-9 place-items-center rounded-full bg-white/10 hover:bg-white/20 transition"
+            >
+              <Heart className="h-4 w-4 text-rose-300" />
+            </Link>
+          )}
+
+          {/* Language Switcher */}
+          <button
+            onClick={() => setLanguage(lang === "en" ? "sw" : "en")}
+            title="Switch Language / Badili Lugha"
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-bold transition cursor-pointer"
+          >
+            <Globe className="h-3.5 w-3.5 text-white/80" />
+            <span className="uppercase">{lang}</span>
+          </button>
+
+          {/* Market Inquiry */}
           <Link
             to="/market"
             title="Ask the market or explore what's already listed"
@@ -154,6 +271,7 @@ export function Header() {
               className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/90 hover:bg-white/10 hover:text-white transition"
             >
               {n.label === "Donation Hub" && <HeartHandshake className="h-4 w-4" />}
+              {n.label === "Safety Tips" && <ShieldCheck className="h-4 w-4" />}
               {n.to === "/" && n.label === "Home" && <span>🏠</span>}
               {n.to === "/browse" && n.label === "Browse" && <span>🔍</span>}
               {n.to === "/dashboard" && <LayoutDashboard className="h-4 w-4" />}
@@ -162,7 +280,6 @@ export function Header() {
             </Link>
           ))}
           <div className="border-t border-white/10 pt-3 mt-3 space-y-2">
-            {/* Market Inquiry — single entry point; the /market hub decides sign-in vs public flow */}
             <Link
               to="/market"
               onClick={() => setMobileOpen(false)}
@@ -212,6 +329,7 @@ export function Footer() {
             <li><Link to="/" className="hover:text-white transition-colors">Home</Link></li>
             <li><Link to="/sell" className="hover:text-white transition-colors">Sell an Item</Link></li>
             <li><Link to="/browse" className="hover:text-white transition-colors">Browse Listings</Link></li>
+            <li><Link to="/safety" className="hover:text-white transition-colors">Safety Tips &amp; Buyer Guide</Link></li>
             <li><Link to="/auth" className="hover:text-white transition-colors">Sign In / Register</Link></li>
           </ul>
         </div>
