@@ -9,7 +9,7 @@ import { Loader2, CheckCircle2, ChevronLeft, ChevronRight, Sparkles, Flame, X, U
 import { STATIC_SUB_COUNTIES } from "@/lib/location-data";
 import { SKILL_CATEGORIES } from "@/lib/skills-data";
 import { CATEGORY_TREE } from "@/lib/category-tree";
-import { itemSlug, specialtySlug } from "@/lib/slug";
+import { itemSlug, specialtySlug, slugify } from "@/lib/slug";
 import { CATEGORY_SPECS, getSpecCategoryForSlug } from "@/lib/category-specs";
 
 export const Route = createFileRoute("/_authenticated/sell")({ component: SellPage });
@@ -67,7 +67,7 @@ function SellPage() {
   const [wards, setWards] = useState<Ward[]>([]);
 
   const [step, setStep] = useState<number>(1);
-  const [terms, setTerms] = useState<boolean>(false);
+  const [terms, setTerms] = useState<boolean>(true);
 
   const [listingType, setListingType] = useState<ListingType>("sale");
   const [title, setTitle] = useState("");
@@ -229,9 +229,20 @@ function SellPage() {
 
   useEffect(() => {
     if (listingType !== "service") return;
-    if (specialty) { setTitle(specialty); setSpecialties([specialty]); }
+    if (specialty) {
+      const formattedTitle = specialty === "TV" ? "TV Repair & Maintenance" : specialty;
+      setTitle(formattedTitle);
+      setSpecialties([specialty]);
+    }
     const leaf = specialty && skillCategorySlug ? catBySlug.get(specialtySlug(skillCategorySlug, specialty)) : undefined;
-    const dbCat = leaf ?? (skillCategorySlug ? catBySlug.get(skillCategorySlug) : undefined);
+    const directSlug = specialty ? catBySlug.get(slugify(specialty)) : undefined;
+    const catByPartial = cats.find((c) => {
+      const s = specialty.toLowerCase();
+      const cn = c.name.toLowerCase();
+      return cn.includes(s) || s.includes(cn) || c.slug.includes(slugify(specialty));
+    });
+    const fallbackGroup = catBySlug.get("semi-pro-services") || catBySlug.get("unskilled-services");
+    const dbCat = leaf ?? directSlug ?? catByPartial ?? (skillCategorySlug ? catBySlug.get(skillCategorySlug) : undefined) ?? fallbackGroup;
     setCategoryId(dbCat ? dbCat.id : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [specialty, skillCategorySlug, cats, listingType]);

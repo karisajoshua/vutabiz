@@ -3,15 +3,15 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { z } from "zod";
 
 const listingInput = z.object({
-  title: z.string().min(3).max(140),
-  description: z.string().max(2000).optional().nullable(),
+  title: z.string().min(2).max(140),
+  description: z.string().max(3000).optional().nullable(),
   price: z.number().min(0),
   category_id: z.number().int().nullable(),
   county_id: z.number().int().nullable(),
   subcounty_id: z.number().int().nullable().optional(),
   ward_id: z.number().int().nullable(),
   town: z.string().max(120).optional().nullable(),
-  image_url: z.string().url().max(500).optional().nullable(),
+  image_url: z.string().max(2048).optional().nullable(),
   images: z.array(z.string()).default([]),
   specs: z.record(z.any()).default({}),
   promotion_tier: z.enum(["standard", "boosted", "featured", "urgent"]).default("standard"),
@@ -56,7 +56,7 @@ export const computeAdFee = createServerFn({ method: "POST" })
 
     const isPro = profile?.subscription_tier === "pro" || profile?.subscription_tier === "enterprise";
 
-    const { data: fee, error } = await context.supabase.rpc("calc_ad_fee", {
+    const { data: fee } = await context.supabase.rpc("calc_ad_fee", {
       _price: data.price,
       _county_id: data.county_id as number,
       _distance_km: data.distance_km,
@@ -64,9 +64,9 @@ export const computeAdFee = createServerFn({ method: "POST" })
       _risk: data.risk,
       _duration_days: data.duration_days,
     });
-    if (error) throw new Error(error.message);
 
-    const baseFee = isPro ? 0 : Number(fee);
+    const isStandard = !data.promotion_tier || data.promotion_tier === "standard";
+    const baseFee = (isPro || isStandard) ? 0 : Number(fee ?? 50);
     const tierCost =
       data.promotion_tier === "featured" ? 200 :
       data.promotion_tier === "urgent" ? 150 :
@@ -96,7 +96,9 @@ export const createListing = createServerFn({ method: "POST" })
       _duration_days: data.duration_days,
     });
 
-    const baseFee = isPro ? 0 : Number(fee ?? 50);
+    const isStandard = data.promotion_tier === "standard";
+    const isServiceOrDonation = data.listing_type === "service" || data.listing_type === "donation";
+    const baseFee = (isPro || isStandard || isServiceOrDonation) ? 0 : Number(fee ?? 50);
     const tierCost =
       data.promotion_tier === "featured" ? 200 :
       data.promotion_tier === "urgent" ? 150 :

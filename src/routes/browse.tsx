@@ -339,12 +339,15 @@ function Browse() {
   // "Services" should only surface the Services & Skills category tree
   // instead of irrelevant item categories (Home & Living, Furniture, etc.).
   const activeTypeForCats = type || listing_type;
+  const isServiceCategoryGroup = (slug: string) =>
+    ["services-skills", "semi-pro-services", "unskilled-services", "services"].includes(slug);
+
   const visibleCategoryTree = useMemo(() => {
     if (activeTypeForCats === "service") {
-      return categoryTree.filter((g) => g.slug === "services-skills");
+      return categoryTree.filter((g) => isServiceCategoryGroup(g.slug));
     }
     if (activeTypeForCats === "sale" || activeTypeForCats === "hire" || activeTypeForCats === "donation") {
-      return categoryTree.filter((g) => g.slug !== "services-skills");
+      return categoryTree.filter((g) => !isServiceCategoryGroup(g.slug));
     }
     return categoryTree; // no type filter active — show every category
   }, [categoryTree, activeTypeForCats]);
