@@ -238,38 +238,11 @@ function Browse() {
     setLoading(true);
     const handler = setTimeout(async () => {
       try {
-        let query = supabase
-          .from("listings")
-          .select("id,title,price,image_url,images,specs,promotion_tier,views_count,distance_km,town,county_id,listing_type,work_rate_type,landmark,donation_recipient,created_at")
-          .eq("status", "active");
-
-        if (q) {
-          query = query.ilike("title", `%${q}%`);
-        }
-
-        if (county) query = query.eq("county_id", county);
-        if (sub_county) query = query.eq("subcounty_id", sub_county);
-        if (subcounty) query = query.eq("subcounty_id", subcounty);
-        if (ward) query = query.eq("ward_id", ward);
-
-        const activeType = type || listing_type;
-        if (activeType) {
-          query = query.eq("listing_type", activeType as "sale" | "hire" | "service" | "donation");
-        }
-
-        if (minPrice !== undefined) {
-          query = query.gte("price", minPrice);
-        }
-
-        if (maxPrice !== undefined) {
-          query = query.lte("price", maxPrice);
-        }
-
+        let categoryCatIds: number[] = [];
         if (category) {
           const cat = categories.find((c) => c.slug === category);
           if (cat) {
-            const allIds = [cat.id, ...collectDescendantIds(cat.id, categories)];
-            query = query.in("category_id", allIds);
+            categoryCatIds = [cat.id, ...collectDescendantIds(cat.id, categories)];
           } else {
             const { data: dbCat } = await supabase
               .from("categories")
@@ -284,24 +257,37 @@ function Browse() {
                 const { data: level3 } = await supabase.from("categories").select("id").in("parent_id", level2Ids);
                 level3Ids = (level3 ?? []).map((c) => c.id);
               }
-              query = query.in("category_id", [dbCat.id, ...level2Ids, ...level3Ids]);
+              categoryCatIds = [dbCat.id, ...level2Ids, ...level3Ids];
             }
           }
         }
 
-        // Apply sort
-        if (sort === "price_asc") {
-          query = query.order("price", { ascending: true });
-        } else if (sort === "price_desc") {
-          query = query.order("price", { ascending: false });
-        } else if (sort === "distance") {
-          query = query.order("distance_km", { ascending: true });
-        } else {
-          query = query.order("created_at", { ascending: false });
+        const buildListingQuery = (selectCols: string) => {
+          let qb = supabase.from("listings").select(selectCols).eq("status", "active");
+          if (q) qb = qb.ilike("title", `%${q}%`);
+          if (county) qb = qb.eq("county_id", county);
+          if (sub_county) qb = qb.eq("subcounty_id", sub_county);
+          if (subcounty) qb = qb.eq("subcounty_id", subcounty);
+          if (ward) qb = qb.eq("ward_id", ward);
+          const activeType = type || listing_type;
+          if (activeType) qb = qb.eq("listing_type", activeType as any);
+          if (minPrice !== undefined) qb = qb.gte("price", minPrice);
+          if (maxPrice !== undefined) qb = qb.lte("price", maxPrice);
+          if (categoryCatIds.length > 0) qb = qb.in("category_id", categoryCatIds);
+          if (sort === "price_asc") qb = qb.order("price", { ascending: true });
+          else if (sort === "price_desc") qb = qb.order("price", { ascending: false });
+          else if (sort === "distance") qb = qb.order("distance_km", { ascending: true });
+          else qb = qb.order("created_at", { ascending: false });
+          return qb;
+        };
+
+        let { data, error } = await buildListingQuery("id,title,price,image_url,images,specs,promotion_tier,views_count,distance_km,town,county_id,listing_type,work_rate_type,landmark,donation_recipient,created_at").limit(80);
+        if (error && (error.code === "42703" || error.message?.includes("column"))) {
+          const fallbackRes = await buildListingQuery("id,title,price,image_url,distance_km,town,county_id,listing_type,work_rate_type,landmark,donation_recipient,created_at").limit(80);
+          data = fallbackRes.data;
         }
 
-        const { data } = await query.limit(80);
-        const rows = (data as ListingRow[]) ?? [];
+        const rows = (data as unknown as ListingRow[]) ?? [];
 
         // Priority sort: Promoted items (featured, urgent) ranked to the top
         const prioritized = [...rows].sort((a, b) => {

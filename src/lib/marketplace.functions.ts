@@ -79,11 +79,17 @@ export const createListing = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .validator((raw: unknown) => listingInput.parse(raw))
   .handler(async ({ data, context }) => {
-    const { data: profile } = await context.supabase
-      .from("profiles")
-      .select("market_share, subscription_tier")
-      .eq("id", context.userId)
-      .maybeSingle();
+    let profile: { market_share?: number | null; subscription_tier?: string | null } | null = null;
+    try {
+      const { data: pData } = await context.supabase
+        .from("profiles")
+        .select("market_share")
+        .eq("id", context.userId)
+        .maybeSingle();
+      profile = pData;
+    } catch {
+      // ignore
+    }
 
     const isPro = profile?.subscription_tier === "pro" || profile?.subscription_tier === "enterprise";
 
@@ -111,21 +117,45 @@ export const createListing = createServerFn({ method: "POST" })
         ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
         : null;
 
-    const { data: row, error } = await context.supabase
+    const fullInsertPayload: Record<string, any> = {
+      ...data,
+      image_url: primaryImage,
+      seller_id: context.userId,
+      ad_fee_ksh,
+      ad_paid: ad_fee_ksh === 0,
+      status: "active",
+      promoted_until,
+    };
+
+    let { data: row, error } = await context.supabase
       .from("listings")
-      .insert({
-        ...data,
-        image_url: primaryImage,
-        seller_id: context.userId,
-        ad_fee_ksh,
-        ad_paid: ad_fee_ksh === 0,
-        status: "active",
-        promoted_until,
-      })
+      .insert(fullInsertPayload as any)
       .select("id")
       .single();
-    if (error) throw new Error(error.message);
-    return { id: row.id, ad_fee_ksh };
+
+    // If PostgREST reports missing columns in schema cache (e.g. images, specs, promotion_tier, promoted_until)
+    if (error && (error.code === "PGRST204" || error.code === "42703" || error.message?.includes("column"))) {
+      const fallbackPayload = { ...fullInsertPayload };
+      delete fallbackPayload.images;
+      delete fallbackPayload.specs;
+      delete fallbackPayload.promotion_tier;
+      delete fallbackPayload.promoted_until;
+      delete fallbackPayload.views_count;
+
+      const retry = await context.supabase
+        .from("listings")
+        .insert(fallbackPayload as any)
+        .select("id")
+        .single();
+      row = retry.data;
+      error = retry.error;
+    }
+
+    if (error) {
+      console.error("[createListing Error]", error);
+      throw new Error(error.message || "Failed to create listing");
+    }
+    return { id: row!.id, ad_fee_ksh };
   });
 
 export const payListingAd = createServerFn({ method: "POST" })

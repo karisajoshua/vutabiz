@@ -363,7 +363,9 @@ function SellPage() {
       }
       toast.success("Listing created. Please choose payment method to publish.");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed");
+      console.error("Listing submission failed:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error(`Submission failed: ${msg}`);
     } finally {
       setLoading(false);
     }
@@ -806,8 +808,10 @@ function SellPage() {
                       Next <ChevronRight className="h-3.5 w-3.5" />
                     </button>
                   ) : (
-                    <button disabled={loading || !terms}
-                      className="inline-flex items-center gap-1 rounded-lg bg-primary-dark hover:bg-primary text-white px-4 py-2 text-xs font-bold disabled:opacity-60">
+                    <button
+                      type="submit"
+                      disabled={loading || !terms}
+                      className="inline-flex items-center gap-1 rounded-lg bg-primary-dark hover:bg-primary text-white px-4 py-2 text-xs font-bold disabled:opacity-60 cursor-pointer">
                       {loading && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {listingType === "donation" ? "Post Donation" : "Submit Listing"}
                     </button>
                   )}

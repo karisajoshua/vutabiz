@@ -187,24 +187,45 @@ function Dashboard() {
     if (!u.user) return;
     setUserId(u.user.id);
 
-    const [{ data: mine }, { data: prof }] = await Promise.all([
-      supabase
+    let minePromise = supabase
+      .from("listings")
+      .select("id,title,price,status,ad_paid,ad_fee_ksh,image_url,promotion_tier,views_count")
+      .eq("seller_id", u.user.id)
+      .order("created_at", { ascending: false });
+
+    let profPromise = supabase
+      .from("profiles")
+      .select("full_name,email,phone,town,county_id,is_phone_verified,verification_status,wallet_balance,subscription_tier")
+      .eq("id", u.user.id)
+      .maybeSingle();
+
+    const [mineRes, profRes] = await Promise.all([minePromise, profPromise]);
+
+    let mineData: any[] = (mineRes.data as any[]) ?? [];
+    if (mineRes.error && (mineRes.error.code === "42703" || mineRes.error.message?.includes("column"))) {
+      const retry = await supabase
         .from("listings")
-        .select("id,title,price,status,ad_paid,ad_fee_ksh,image_url,promotion_tier,views_count")
+        .select("id,title,price,status,ad_paid,ad_fee_ksh,image_url")
         .eq("seller_id", u.user.id)
-        .order("created_at", { ascending: false }),
-      supabase
+        .order("created_at", { ascending: false });
+      mineData = (retry.data as any[]) ?? [];
+    }
+
+    let profileData: any = profRes.data;
+    if (profRes.error && (profRes.error.code === "42703" || profRes.error.message?.includes("column"))) {
+      const pRetry = await supabase
         .from("profiles")
-        .select("full_name,email,phone,town,county_id,is_phone_verified,verification_status,wallet_balance,subscription_tier")
+        .select("full_name,email,phone,town,county_id")
         .eq("id", u.user.id)
-        .maybeSingle(),
-    ]);
+        .maybeSingle();
+      profileData = pRetry.data;
+    }
 
-    setListings((mine as Listing[]) ?? []);
-    setProfile(prof as Profile | null);
-    if (prof?.phone) setPhoneToVerify(prof.phone);
+    setListings(mineData as unknown as Listing[]);
+    setProfile(profileData as unknown as Profile | null);
+    if (profileData?.phone) setPhoneToVerify(profileData.phone);
 
-    const ids = (mine ?? []).map((m) => m.id);
+    const ids = mineData.map((m: any) => m.id);
     if (ids.length) {
       const { data: offs } = await supabase
         .from("offers")

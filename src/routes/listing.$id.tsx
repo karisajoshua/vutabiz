@@ -170,22 +170,43 @@ function ListingPage() {
   const [shareOpen, setShareOpen] = useState(false);
 
   async function load() {
-    const { data: l } = await supabase
+    let { data: l, error: lErr } = await supabase
       .from("listings")
       .select(
         "id,title,description,price,image_url,images,specs,promotion_tier,views_count,seller_id,status,county_id,subcounty_id,ward_id,town,listing_type,work_rate_type,landmark,donation_recipient,offers_delivery,transport_means,payment_methods,job_title,education_level,languages,experience_years,self_description,category_id",
       )
       .eq("id", id)
       .maybeSingle();
-    const listingData = l as (Listing & { category_id?: number | null }) | null;
+
+    if (lErr && (lErr.code === "42703" || lErr.message?.includes("column"))) {
+      const fallback = await supabase
+        .from("listings")
+        .select(
+          "id,title,description,price,image_url,seller_id,status,county_id,subcounty_id,ward_id,town,listing_type,work_rate_type,landmark,donation_recipient,offers_delivery,transport_means,payment_methods,job_title,education_level,languages,experience_years,self_description,category_id",
+        )
+        .eq("id", id)
+        .maybeSingle();
+      l = fallback.data as any;
+    }
+
+    const listingData = l as unknown as (Listing & { category_id?: number | null }) | null;
     setListing(listingData);
     if (listingData) {
-      const { data: s } = await supabase
+      let { data: s, error: sErr } = await supabase
         .from("profiles")
         .select("full_name,phone,email,verification_status,is_phone_verified")
         .eq("id", listingData.seller_id)
         .maybeSingle();
-      setSeller(s as Seller | null);
+
+      if (sErr && (sErr.code === "42703" || sErr.message?.includes("column"))) {
+        const fallbackProfile = await supabase
+          .from("profiles")
+          .select("full_name,phone,email")
+          .eq("id", listingData.seller_id)
+          .maybeSingle();
+        s = fallbackProfile.data as any;
+      }
+      setSeller(s as unknown as Seller | null);
       if (listingData.county_id) {
         const { data: c } = await supabase
           .from("counties")
