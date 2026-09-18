@@ -471,8 +471,24 @@ function Browse() {
           ].map((t) => (
             <button
               key={t.v}
-              onClick={() => navigate({ to: "/browse", search: (prev: PrevSearch) => ({ ...prev, listing_type: (t.v as "sale" | "hire" | "service" | "donation") || undefined, type: undefined, category: undefined }) })}
-              className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition ${(activeType || "") === t.v ? "bg-primary text-white border-primary" : "bg-white border-border hover:border-primary/50"}`}
+              onClick={() => {
+                const nextType = (t.v as "sale" | "hire" | "service" | "donation") || undefined;
+                navigate({
+                  to: "/browse",
+                  search: (prev: PrevSearch) => {
+                    const next = { ...prev };
+                    delete (next as any).type;
+                    delete (next as any).category;
+                    if (nextType) {
+                      next.listing_type = nextType;
+                    } else {
+                      delete (next as any).listing_type;
+                    }
+                    return next;
+                  },
+                });
+              }}
+              className={`text-xs px-3 py-1.5 rounded-full font-semibold border transition cursor-pointer ${(activeType || "") === t.v ? "bg-primary text-white border-primary shadow-sm" : "bg-white border-border hover:border-primary/50 text-foreground"}`}
             >
               {t.l}
             </button>

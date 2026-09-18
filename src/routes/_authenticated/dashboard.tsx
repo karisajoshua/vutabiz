@@ -74,6 +74,7 @@ type Listing = {
   image_url: string | null;
   promotion_tier?: string | null;
   views_count?: number | null;
+  listing_type?: "sale" | "hire" | "service" | "donation" | null;
 };
 type Offer = {
   id: string;
@@ -125,6 +126,7 @@ function Dashboard() {
   const [activeTab, setActiveTab] = useState<
     "listings" | "offers" | "inbox" | "orders" | "analytics" | "favorites" | "referrals" | "wallet" | "verification" | "saved" | "bulk"
   >("listings");
+  const [listingTypeFilter, setListingTypeFilter] = useState<"" | "sale" | "hire" | "service" | "donation">("");
 
   const respond = useServerFn(respondOffer);
   const setStatus = useServerFn(updateListingStatus);
@@ -189,7 +191,7 @@ function Dashboard() {
 
     let minePromise = supabase
       .from("listings")
-      .select("id,title,price,status,ad_paid,ad_fee_ksh,image_url,promotion_tier,views_count")
+      .select("id,title,price,status,ad_paid,ad_fee_ksh,image_url,promotion_tier,views_count,listing_type")
       .eq("seller_id", u.user.id)
       .order("created_at", { ascending: false });
 
@@ -205,7 +207,7 @@ function Dashboard() {
     if (mineRes.error && (mineRes.error.code === "42703" || mineRes.error.message?.includes("column"))) {
       const retry = await supabase
         .from("listings")
-        .select("id,title,price,status,ad_paid,ad_fee_ksh,image_url")
+        .select("id,title,price,status,ad_paid,ad_fee_ksh,image_url,listing_type")
         .eq("seller_id", u.user.id)
         .order("created_at", { ascending: false });
       mineData = (retry.data as any[]) ?? [];
@@ -511,104 +513,179 @@ function Dashboard() {
           </div>
 
           {/* Listings tab */}
-          {activeTab === "listings" && (
-            <div className="space-y-2">
-              {listings.map((l) => (
-                <div
-                  key={l.id}
-                  className="bg-card rounded-xl border border-border/40 shadow-sm p-2.5 flex items-center gap-3"
-                >
-                  <div className="h-12 w-12 bg-muted rounded-lg overflow-hidden shrink-0">
-                    {l.image_url ? (
-                       <img src={l.image_url} alt="" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full grid place-items-center text-muted-foreground text-[10px]">No img</div>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <Link
-                        to="/listing/$id"
-                        params={{ id: l.id }}
-                        className="font-bold text-xs truncate hover:text-primary transition-colors"
+          {activeTab === "listings" && (() => {
+            const typeFilters: { label: string; value: "" | "sale" | "hire" | "service" | "donation" }[] = [
+              { label: "All", value: "" },
+              { label: "For Sale", value: "sale" },
+              { label: "For Hire", value: "hire" },
+              { label: "Services", value: "service" },
+              { label: "Donations", value: "donation" },
+            ];
+            const filteredListings = listingTypeFilter
+              ? listings.filter((l) => l.listing_type === listingTypeFilter)
+              : listings;
+            const countFor = (v: "" | "sale" | "hire" | "service" | "donation") =>
+              v === "" ? listings.length : listings.filter((l) => l.listing_type === v).length;
+
+            return (
+              <div className="space-y-3">
+                {/* Type filter pill tabs */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {typeFilters.map((f) => {
+                    const isActive = listingTypeFilter === f.value;
+                    const count = countFor(f.value);
+                    return (
+                      <button
+                        key={f.value}
+                        onClick={() => setListingTypeFilter(f.value)}
+                        className={`inline-flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold border transition cursor-pointer ${
+                          isActive
+                            ? "bg-primary text-white border-primary shadow-sm"
+                            : "bg-card text-muted-foreground border-border/50 hover:border-primary/40 hover:text-primary"
+                        }`}
                       >
-                        {l.title}
-                      </Link>
-                      {l.promotion_tier === "featured" && (
-                        <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-amber-500 text-white">FEATURED</span>
-                      )}
-                      {l.promotion_tier === "urgent" && (
-                        <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-rose-600 text-white">URGENT</span>
-                      )}
-                      {l.promotion_tier === "boosted" && (
-                        <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-primary text-white">BOOSTED</span>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">
-                      KSh {Number(l.price).toLocaleString()}
-                      <span className="mx-1 text-border">·</span>
-                      Ad: KSh {l.ad_fee_ksh}
-                      <span className="mx-1 text-border">·</span>
-                      <span className={l.ad_paid ? "text-orange-600 font-semibold" : "text-amber-600 font-semibold"}>
-                        {l.ad_paid ? "✓ Paid" : "Unpaid"}
+                        {f.label}
+                        {count > 0 && (
+                          <span
+                            className={`text-[10px] font-bold rounded-full px-1.5 py-0 leading-4 ${
+                              isActive ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Listing cards */}
+                <div className="space-y-2">
+                  {filteredListings.map((l) => (
+                    <div
+                      key={l.id}
+                      className="bg-card rounded-xl border border-border/40 shadow-sm p-2.5 flex items-center gap-3"
+                    >
+                      <div className="h-12 w-12 bg-muted rounded-lg overflow-hidden shrink-0">
+                        {l.image_url ? (
+                           <img src={l.image_url} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full grid place-items-center text-muted-foreground text-[10px]">No img</div>
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Link
+                            to="/listing/$id"
+                            params={{ id: l.id }}
+                            className="font-bold text-xs truncate hover:text-primary transition-colors"
+                          >
+                            {l.title}
+                          </Link>
+                          {l.promotion_tier === "featured" && (
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-amber-500 text-white">FEATURED</span>
+                          )}
+                          {l.promotion_tier === "urgent" && (
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-rose-600 text-white">URGENT</span>
+                          )}
+                          {l.promotion_tier === "boosted" && (
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded bg-primary text-white">BOOSTED</span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          KSh {Number(l.price).toLocaleString()}
+                          <span className="mx-1 text-border">·</span>
+                          Ad: KSh {l.ad_fee_ksh}
+                          <span className="mx-1 text-border">·</span>
+                          <span className={l.ad_paid ? "text-orange-600 font-semibold" : "text-amber-600 font-semibold"}>
+                            {l.ad_paid ? "✓ Paid" : "Unpaid"}
+                          </span>
+                        </div>
+                      </div>
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          l.status === "active"
+                            ? "bg-orange-50 text-orange-700 border-orange-200"
+                            : l.status === "sold"
+                              ? "bg-amber-50 text-amber-700 border-amber-200"
+                              : "bg-muted text-muted-foreground border-border"
+                        }`}
+                      >
+                        {l.status}
                       </span>
+                      <div className="flex gap-1 shrink-0">
+                        {l.status === "active" && (
+                          <button
+                            onClick={() => setBoostModalListing(l)}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold transition cursor-pointer"
+                            title="Boost this listing"
+                          >
+                            <Sparkles className="h-3.5 w-3.5" /> Boost
+                          </button>
+                        )}
+                        {l.status !== "sold" && (
+                          <button
+                            onClick={() => change(l.id, "sold")}
+                            title="Mark as sold"
+                            className="grid h-8 w-8 place-items-center rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition cursor-pointer"
+                          >
+                            <PackageCheck className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                        {l.status !== "deleted" && (
+                          <button
+                            onClick={() => change(l.id, "deleted")}
+                            title="Delete listing"
+                            className="grid h-8 w-8 place-items-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 transition cursor-pointer"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                      l.status === "active"
-                        ? "bg-orange-50 text-orange-700 border-orange-200"
-                        : l.status === "sold"
-                          ? "bg-amber-50 text-amber-700 border-amber-200"
-                          : "bg-muted text-muted-foreground border-border"
-                    }`}
-                  >
-                    {l.status}
-                  </span>
-                  <div className="flex gap-1 shrink-0">
-                    {l.status === "active" && (
-                      <button
-                        onClick={() => setBoostModalListing(l)}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 text-xs font-bold transition cursor-pointer"
-                        title="Boost this listing"
-                      >
-                        <Sparkles className="h-3.5 w-3.5" /> Boost
-                      </button>
-                    )}
-                    {l.status !== "sold" && (
-                      <button
-                        onClick={() => change(l.id, "sold")}
-                        title="Mark as sold"
-                        className="grid h-8 w-8 place-items-center rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200 transition cursor-pointer"
-                      >
-                        <PackageCheck className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                    {l.status !== "deleted" && (
-                      <button
-                        onClick={() => change(l.id, "deleted")}
-                        title="Delete listing"
-                        className="grid h-8 w-8 place-items-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100 border border-red-200 transition cursor-pointer"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                  </div>
+                  ))}
+
+                  {/* Empty state */}
+                  {!filteredListings.length && (
+                    <div className="text-center py-10 bg-card rounded-xl border border-border/40">
+                      {listings.length === 0 ? (
+                        <>
+                          <p className="text-muted-foreground text-xs">No listings yet.</p>
+                          <Link
+                            to="/sell"
+                            className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary text-white px-4 py-2 text-xs font-bold shadow hover:bg-primary-dark transition"
+                          >
+                            <Plus className="h-3.5 w-3.5" /> Post your first ad
+                          </Link>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-muted-foreground text-xs mb-2">
+                            No{" "}
+                            {listingTypeFilter === "sale"
+                              ? "For Sale"
+                              : listingTypeFilter === "hire"
+                              ? "For Hire"
+                              : listingTypeFilter === "service"
+                              ? "Services"
+                              : "Donations"}{" "}
+                            listings yet.
+                          </p>
+                          <button
+                            onClick={() => setListingTypeFilter("")}
+                            className="text-xs text-primary underline underline-offset-2 cursor-pointer"
+                          >
+                            Show all listings
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
-              ))}
-              {!listings.length && (
-                <div className="text-center py-10 bg-card rounded-xl border border-border/40">
-                  <p className="text-muted-foreground text-xs">No listings yet.</p>
-                  <Link
-                    to="/sell"
-                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-primary text-white px-4 py-2 text-xs font-bold shadow hover:bg-primary-dark transition"
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Post your first ad
-                  </Link>
-                </div>
-              )}
-            </div>
-          )}
+              </div>
+            );
+          })()}
+
 
           {/* Offers tab — grouped per listing so the seller can compare and pick one */}
           {activeTab === "offers" && (
