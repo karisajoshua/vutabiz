@@ -48,11 +48,11 @@ export const STATIC_SUB_COUNTIES: StaticSubCounty[] = [
   { id: 37, county_id: 8, name: "Eldas" },
   { id: 38, county_id: 8, name: "Wajir South" },
   // Mandera (9)
-  { id: 39, county_id: 9, name: "Mandera East" },
+  { id: 39, county_id: 9, name: "Mandera West" },
   { id: 40, county_id: 9, name: "Banissa" },
   { id: 41, county_id: 9, name: "Mandera North" },
   { id: 42, county_id: 9, name: "Mandera South" },
-  { id: 43, county_id: 9, name: "Mandera West" },
+  { id: 43, county_id: 9, name: "Mandera East" },
   { id: 44, county_id: 9, name: "Lafey" },
   // Marsabit (10)
   { id: 45, county_id: 10, name: "Moyale" },
@@ -191,8 +191,8 @@ export const STATIC_SUB_COUNTIES: StaticSubCounty[] = [
   { id: 158, county_id: 30, name: "Baringo North" },
   { id: 159, county_id: 30, name: "Baringo Central" },
   { id: 160, county_id: 30, name: "Baringo South" },
-  { id: 161, county_id: 30, name: "Eldama Ravine" },
-  { id: 162, county_id: 30, name: "Mogotio" },
+  { id: 161, county_id: 30, name: "Mogotio" },
+  { id: 162, county_id: 30, name: "Eldama Ravine" },
   // Laikipia (31)
   { id: 163, county_id: 31, name: "Laikipia West" },
   { id: 164, county_id: 31, name: "Laikipia East" },
@@ -255,7 +255,7 @@ export const STATIC_SUB_COUNTIES: StaticSubCounty[] = [
   { id: 214, county_id: 38, name: "Luanda" },
   { id: 215, county_id: 38, name: "Emuhaya" },
   // Bungoma (39)
-  { id: 216, county_id: 39, name: "Mt Elgon" },
+  { id: 216, county_id: 39, name: "MT. ELGON" },
   { id: 217, county_id: 39, name: "Sirisia" },
   { id: 218, county_id: 39, name: "Kabuchai" },
   { id: 219, county_id: 39, name: "Bumula" },
@@ -294,8 +294,8 @@ export const STATIC_SUB_COUNTIES: StaticSubCounty[] = [
   { id: 248, county_id: 43, name: "Rangwe" },
   { id: 249, county_id: 43, name: "Homa Bay Town" },
   { id: 250, county_id: 43, name: "Ndhiwa" },
-  { id: 251, county_id: 43, name: "Mbita" },
-  { id: 252, county_id: 43, name: "Suba" },
+  { id: 251, county_id: 43, name: "Suba North" },
+  { id: 252, county_id: 43, name: "Suba South" },
   // Migori (44)
   { id: 253, county_id: 44, name: "Rongo" },
   { id: 254, county_id: 44, name: "Awendo" },
@@ -319,7 +319,7 @@ export const STATIC_SUB_COUNTIES: StaticSubCounty[] = [
   { id: 270, county_id: 46, name: "Kitutu Masaba" },
   { id: 271, county_id: 46, name: "West Mugirango" },
   { id: 272, county_id: 46, name: "North Mugirango" },
-  { id: 273, county_id: 46, name: "Bomet South" },
+  { id: 273, county_id: 46, name: "Borabu" },
   // Nairobi (47)
   { id: 274, county_id: 47, name: "Westlands" },
   { id: 275, county_id: 47, name: "Dagoretti North" },

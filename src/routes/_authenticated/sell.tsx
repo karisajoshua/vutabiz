@@ -194,16 +194,10 @@ function SellPage() {
   }, [price, countyId, distance, risk, days, compute]);
 
   const subCountiesForCounty = subCounties.filter((sc) => sc.county_id === Number(countyId));
-  const selectedSubCountyName = subCounties.find((sc) => sc.id === Number(subCountyId))?.name;
   const wardsForSubCounty = wards.filter(
     (w) =>
       w.county_id === Number(countyId) &&
-      (subCountyId ? w.sub_county_id === Number(subCountyId) : true) &&
-      // Some historical seed data created a placeholder "ward" whose name just
-      // duplicates its parent sub-county's name — hide those so only genuine
-      // wards show up in the dropdown.
-      (!selectedSubCountyName ||
-        w.name.trim().toLowerCase() !== selectedSubCountyName.trim().toLowerCase()),
+      (subCountyId ? w.sub_county_id === Number(subCountyId) : true),
   );
   const activeSkillCategory = SKILL_CATEGORIES.find((c) => c.slug === skillCategorySlug);
 

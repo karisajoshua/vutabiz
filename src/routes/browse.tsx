@@ -208,20 +208,29 @@ function Browse() {
           setSubCounties(STATIC_SUB_COUNTIES as SubCounty[]);
         }
       );
-    supabase
-      .from("wards")
-      .select("id,county_id,sub_county_id:subcounty_id,name")
-      .order("name")
-      .then(({ data }) => {
-        const rows = (data as any[]) ?? [];
-        const normalized = rows.map((r) => ({
+    (async () => {
+      const pageSize = 1000;
+      let from = 0;
+      const acc: Ward[] = [];
+      while (true) {
+        const { data, error } = await supabase
+          .from("wards")
+          .select("id,county_id,sub_county_id:subcounty_id,name")
+          .order("name")
+          .range(from, from + pageSize - 1);
+        if (error || !data) break;
+        const normalized = (data as any[]).map((r) => ({
           id: r.id,
           county_id: r.county_id,
           sub_county_id: r.sub_county_id ?? r.subcounty_id ?? null,
           name: r.name,
         })) as Ward[];
-        setWards(normalized);
-      });
+        acc.push(...normalized);
+        if (data.length < pageSize) break;
+        from += pageSize;
+      }
+      setWards(acc);
+    })();
   }, []);
 
   // Sync state with URL updates

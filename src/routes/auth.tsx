@@ -70,27 +70,33 @@ function AuthPage() {
           setSubCounties(STATIC_SUB_COUNTIES as SubCounty[]);
         }
       );
-    supabase
-      .from("wards")
-      .select("id,county_id,sub_county_id:subcounty_id,name")
-      .order("name")
-      .then(
-        ({ data }) => {
-          const rows = (data as any[]) ?? [];
-          const dbWards = rows.map((r) => ({
+    (async () => {
+      try {
+        const pageSize = 1000;
+        let from = 0;
+        const acc: Ward[] = [];
+        while (true) {
+          const { data, error } = await supabase
+            .from("wards")
+            .select("id,county_id,sub_county_id:subcounty_id,name")
+            .order("name")
+            .range(from, from + pageSize - 1);
+          if (error || !data) break;
+          const normalized = (data as any[]).map((r) => ({
             id: r.id,
             county_id: r.county_id,
             sub_county_id: r.sub_county_id ?? r.subcounty_id ?? null,
             name: r.name,
           })) as Ward[];
-          // Do not synthesize wards from sub-counties; use only DB-provided wards.
-          setWards(dbWards);
-        },
-        () => {
-          // On error, leave wards empty so UI shows sub-counties first, then wards when available.
-          setWards([]);
+          acc.push(...normalized);
+          if (data.length < pageSize) break;
+          from += pageSize;
         }
-      );
+        setWards(acc);
+      } catch {
+        setWards([]);
+      }
+    })();
     supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
         const userEmail = data.session.user?.email || "";
@@ -105,24 +111,14 @@ function AuthPage() {
     [subCounties, countyId],
   );
 
-  const selectedSubCountyName = useMemo(
-    () => subCounties.find((sc) => sc.id === Number(subCountyId))?.name,
-    [subCounties, subCountyId],
-  );
-
   const wardsForSubCounty = useMemo(
     () =>
       wards.filter(
         (w) =>
           w.county_id === Number(countyId) &&
-          (subCountyId ? w.sub_county_id === Number(subCountyId) : true) &&
-          // Some historical seed data created a placeholder "ward" whose
-          // name just duplicates its parent sub-county's name — hide those
-          // so only genuine wards show up in the dropdown.
-          (!selectedSubCountyName ||
-            w.name.trim().toLowerCase() !== selectedSubCountyName.trim().toLowerCase()),
+          (subCountyId ? w.sub_county_id === Number(subCountyId) : true),
       ),
-    [wards, countyId, subCountyId, selectedSubCountyName],
+    [wards, countyId, subCountyId],
   );
 
   // When admin email typed in sign-in mode: reset the "not found" flag
