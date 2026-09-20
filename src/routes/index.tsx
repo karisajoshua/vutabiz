@@ -26,6 +26,7 @@ import catHome from "@/assets/cat-home.jpg";
 import catFurniture from "@/assets/cat-furniture.jpg";
 import catConstruction from "@/assets/cat-construction.jpg";
 import catFarm from "@/assets/cat-farm.jpg";
+import catServices from "@/assets/cat-services.jpg";
 
 
 
@@ -55,6 +56,12 @@ const CATEGORIES_MAPPING = [
     slug: "animal-farm",
     desc: "Live Animals, Fresh Produce, Seeds, Fertilizer",
     img: catFarm,
+  },
+  {
+    name: "Services",
+    slug: "services-skills",
+    desc: "Fundis, Technicians, Mechanics, Masons, Electricians",
+    img: catServices,
   },
 ];
 
@@ -177,7 +184,7 @@ function Home() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <Link
                 to="/sell"
-                className="inline-flex items-center gap-1.5 rounded-full bg-accent text-primary-dark px-4 py-2 text-xs md:text-sm font-bold shadow hover:brightness-105 transition"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white text-primary px-4 py-2 text-xs md:text-sm font-bold shadow hover:shadow-md transition"
               >
                 <Tag className="h-3.5 w-3.5" /> Sell / Advertise
               </Link>
@@ -284,7 +291,7 @@ function Home() {
 
       {/* Optional visual tiles kept for imagery */}
       <section className="mx-auto max-w-7xl w-full px-4 pb-3">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {CATEGORIES_MAPPING.map((c) => (
             <Link
               key={c.name}

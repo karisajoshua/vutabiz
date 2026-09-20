@@ -112,10 +112,11 @@ export function Header() {
 
   const unreadNotifs = notifications.filter((n) => !n.is_read).length;
 
-  const navLinks: { to: string; label: string; search?: Record<string, string> }[] = [
+  const navLinks: { to: string; label: string; search?: Record<string, string>; isButton?: boolean }[] = [
     { to: "/", label: lang === "sw" ? "Mwanzo" : "Home" },
     { to: "/browse", label: lang === "sw" ? "Tazama Bidhaa" : "Browse" },
     { to: "/donations", label: lang === "sw" ? "Michango" : "Donation Hub" },
+    { to: "/market", label: t("marketInquiry"), isButton: true },
     { to: "/safety", label: t("safetyTips") },
     ...(email ? [{ to: "/dashboard", label: t("myDashboard") }] : []),
     ...(isAdmin ? [{ to: "/admin", label: t("adminPanel") }] : []),
@@ -127,12 +128,24 @@ export function Header() {
         <Logo light />
 
         {/* Desktop nav */}
-        <nav className="hidden lg:flex items-center gap-6 text-sm font-medium text-white/90">
-          {navLinks.map((n, i) => (
-            <Link key={`${n.to}-${i}`} to={n.to} search={n.search as never} className="hover:text-white transition-colors">
-              {n.label}
-            </Link>
-          ))}
+        <nav className="hidden lg:flex items-center gap-5 text-sm font-medium text-white/90">
+          {navLinks.map((n, i) =>
+            n.isButton ? (
+              <Link
+                key={`${n.to}-${i}`}
+                to={n.to}
+                search={n.search as never}
+                title="Ask the market or explore what's already listed"
+                className="inline-flex items-center gap-1.5 rounded-full bg-white text-primary px-3.5 py-1.5 text-xs font-bold shadow-sm hover:shadow-md hover:bg-white/90 transition"
+              >
+                <MessagesSquare className="h-3.5 w-3.5" /> {n.label}
+              </Link>
+            ) : (
+              <Link key={`${n.to}-${i}`} to={n.to} search={n.search as never} className="hover:text-white transition-colors">
+                {n.label}
+              </Link>
+            )
+          )}
         </nav>
 
         {/* Desktop actions */}
@@ -219,14 +232,7 @@ export function Header() {
             <span className="uppercase">{lang}</span>
           </button>
 
-          {/* Market Inquiry */}
-          <Link
-            to="/market"
-            title="Ask the market or explore what's already listed"
-            className="inline-flex items-center gap-1.5 rounded-full bg-white text-primary px-4 py-2 text-sm font-semibold shadow-sm hover:shadow-md transition"
-          >
-            <MessagesSquare className="h-3.5 w-3.5" /> Market Inquiry
-          </Link>
+
 
           {email ? (
             <button
@@ -268,10 +274,15 @@ export function Header() {
               to={n.to}
               search={n.search as never}
               onClick={() => setMobileOpen(false)}
-              className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-white/90 hover:bg-white/10 hover:text-white transition"
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition ${
+                n.isButton
+                  ? "bg-white text-primary font-bold hover:bg-white/90"
+                  : "text-white/90 hover:bg-white/10 hover:text-white"
+              }`}
             >
               {n.label === "Donation Hub" && <HeartHandshake className="h-4 w-4" />}
-              {n.label === "Safety Tips" && <ShieldCheck className="h-4 w-4" />}
+              {n.to === "/market" && <MessagesSquare className="h-4 w-4" />}
+              {(n.label === "Safety Tips" || n.to === "/safety") && <ShieldCheck className="h-4 w-4" />}
               {n.to === "/" && n.label === "Home" && <span>🏠</span>}
               {n.to === "/browse" && n.label === "Browse" && <span>🔍</span>}
               {n.to === "/dashboard" && <LayoutDashboard className="h-4 w-4" />}
@@ -280,13 +291,6 @@ export function Header() {
             </Link>
           ))}
           <div className="border-t border-white/10 pt-3 mt-3 space-y-2">
-            <Link
-              to="/market"
-              onClick={() => setMobileOpen(false)}
-              className="flex items-center justify-center gap-2 w-full rounded-xl bg-white text-primary py-2.5 text-sm font-bold"
-            >
-              <MessagesSquare className="h-4 w-4" /> Market Inquiry
-            </Link>
 
             {email ? (
               <button
