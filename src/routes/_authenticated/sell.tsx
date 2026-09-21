@@ -7,7 +7,7 @@ import { Header, Footer } from "@/components/site-chrome";
 import { toast } from "sonner";
 import { Loader2, CheckCircle2, ChevronLeft, ChevronRight, Sparkles, Flame, X, UploadCloud, Smartphone, Wallet } from "lucide-react";
 import { STATIC_SUB_COUNTIES } from "@/lib/location-data";
-import { SKILL_CATEGORIES } from "@/lib/skills-data";
+import { SKILL_CATEGORIES, SERVICE_CATEGORIES, CONSTRUCTION_SUB_CATEGORIES, CONSTRUCTION_SLUGS } from "@/lib/skills-data";
 import { CATEGORY_TREE } from "@/lib/category-tree";
 import { itemSlug, specialtySlug, slugify } from "@/lib/slug";
 import { CATEGORY_SPECS, getSpecCategoryForSlug } from "@/lib/category-specs";
@@ -106,6 +106,8 @@ function SellPage() {
   const [selfDesc, setSelfDesc] = useState("");
   const [workRateType, setWorkRateType] = useState<string>("hourly");
   const [skillCategorySlug, setSkillCategorySlug] = useState<string>("");
+  // For the Construction group, an extra level: construction sub-type slug
+  const [constructionSubSlug, setConstructionSubSlug] = useState<string>("");
   // Cascading: Skill Category → Specialty. The chosen specialty becomes the
   // service's title, the same way an item's title comes from its last category.
   const [specialty, setSpecialty] = useState<string>("");
@@ -199,7 +201,13 @@ function SellPage() {
       w.county_id === Number(countyId) &&
       (subCountyId ? w.sub_county_id === Number(subCountyId) : true),
   );
-  const activeSkillCategory = SKILL_CATEGORIES.find((c) => c.slug === skillCategorySlug);
+  // The effective skill category slug: if "construction" is chosen as the top-level
+  // category and a construction sub-type has been selected, the effective slug for
+  // specialty lookups is the sub-type slug (e.g. "construction-specialist-1").
+  const effectiveSkillSlug = skillCategorySlug === "construction" ? constructionSubSlug : skillCategorySlug;
+  const activeSkillCategory = SKILL_CATEGORIES.find((c) => c.slug === effectiveSkillSlug);
+  const activeConstructionSub = CONSTRUCTION_SUB_CATEGORIES.find((c) => c.slug === constructionSubSlug);
+  const isConstructionGroup = skillCategorySlug === "construction";
 
   // Cascading item category picker (Category → Sub-category → Item), matching
   // the CATEGORY_TREE used by the Buy/Hire page's own category browser.
@@ -228,7 +236,7 @@ function SellPage() {
       setTitle(formattedTitle);
       setSpecialties([specialty]);
     }
-    const leaf = specialty && skillCategorySlug ? catBySlug.get(specialtySlug(skillCategorySlug, specialty)) : undefined;
+    const leaf = specialty && effectiveSkillSlug ? catBySlug.get(specialtySlug(effectiveSkillSlug, specialty)) : undefined;
     const directSlug = specialty ? catBySlug.get(slugify(specialty)) : undefined;
     const catByPartial = cats.find((c) => {
       const s = specialty.toLowerCase();
@@ -236,10 +244,10 @@ function SellPage() {
       return cn.includes(s) || s.includes(cn) || c.slug.includes(slugify(specialty));
     });
     const fallbackGroup = catBySlug.get("semi-pro-services") || catBySlug.get("unskilled-services");
-    const dbCat = leaf ?? directSlug ?? catByPartial ?? (skillCategorySlug ? catBySlug.get(skillCategorySlug) : undefined) ?? fallbackGroup;
+    const dbCat = leaf ?? directSlug ?? catByPartial ?? (effectiveSkillSlug ? catBySlug.get(effectiveSkillSlug) : undefined) ?? fallbackGroup;
     setCategoryId(dbCat ? dbCat.id : "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [specialty, skillCategorySlug, cats, listingType]);
+  }, [specialty, skillCategorySlug, constructionSubSlug, cats, listingType]);
 
   const togglePay = (m: string) => setPayMethods((prev) => (prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]));
 
@@ -286,6 +294,7 @@ function SellPage() {
     if (n === 1) {
       if (listingType === "service") {
         if (!skillCategorySlug) return "Pick a skill category";
+        if (isConstructionGroup && !constructionSubSlug) return "Pick a construction type";
         if (!specialty) return "Pick a specialty";
       } else {
         if (!groupSlug) return "Pick a category";
@@ -469,6 +478,7 @@ function SellPage() {
                               setSpecialties([]);
                               setSpecialty("");
                               setSkillCategorySlug("");
+                              setConstructionSubSlug("");
                               setGroupSlug("");
                               setSubCategorySlug("");
                               setItemLabel("");
@@ -486,19 +496,48 @@ function SellPage() {
 
                     {listingType === "service" ? (
                       <>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {/* Skill Category select – uses consolidated SERVICE_CATEGORIES with Construction as a group */}
+                        <div className={`grid gap-2.5 ${isConstructionGroup ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2"}`}>
                           <Sel
                             label="Skill Category"
                             v={skillCategorySlug}
-                            on={(v) => { setSkillCategorySlug(v as string); setSpecialty(""); }}
-                            opts={[{ v: "", l: "Select skill category" }, ...SKILL_CATEGORIES.map((c) => ({ v: c.slug, l: c.name }))]}
+                            on={(v) => {
+                              setSkillCategorySlug(v as string);
+                              setConstructionSubSlug("");
+                              setSpecialty("");
+                            }}
+                            opts={[
+                              { v: "", l: "Select skill category" },
+                              ...SERVICE_CATEGORIES.map((c) => ({ v: c.slug, l: c.name })),
+                            ]}
                           />
+                          {/* Construction sub-type: only shown when Construction is selected */}
+                          {isConstructionGroup && (
+                            <Sel
+                              label="Construction Type"
+                              v={constructionSubSlug}
+                              on={(v) => { setConstructionSubSlug(v as string); setSpecialty(""); }}
+                              opts={[
+                                { v: "", l: "Select construction type" },
+                                ...CONSTRUCTION_SUB_CATEGORIES.map((c) => ({ v: c.slug, l: c.shortName })),
+                              ]}
+                            />
+                          )}
                           <Sel
                             label="Specialty"
                             v={specialty}
                             on={(v) => setSpecialty(v as string)}
                             opts={[
-                              { v: "", l: activeSkillCategory ? "Select specialty" : "— pick a skill category first" },
+                              {
+                                v: "",
+                                l: !skillCategorySlug
+                                  ? "— pick a skill category first"
+                                  : isConstructionGroup && !constructionSubSlug
+                                  ? "— pick a construction type first"
+                                  : activeSkillCategory
+                                  ? "Select specialty"
+                                  : "— pick a skill category first",
+                              },
                               ...(activeSkillCategory?.specialties.map((s) => ({ v: s, l: s })) ?? []),
                             ]}
                           />
