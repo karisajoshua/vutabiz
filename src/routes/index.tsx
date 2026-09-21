@@ -52,7 +52,7 @@ const CATEGORIES_MAPPING = [
     img: catConstruction,
   },
   {
-    name: "Animal & Farm Produce",
+    name: "Animal & Produce",
     slug: "animal-farm",
     desc: "Live Animals, Fresh Produce, Seeds, Fertilizer",
     img: catFarm,
@@ -277,7 +277,7 @@ function Home() {
 
 
       {/* CATEGORIES — nested dropdown */}
-      <section className="mx-auto max-w-7xl w-full px-4 pt-6 pb-3">
+      <section className="mx-auto max-w-7xl w-full px-4 pt-6 pb-2">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-extrabold text-primary-dark uppercase tracking-tight">
             Browse by Category
@@ -289,14 +289,14 @@ function Home() {
         <CategoryMegaDropdown />
       </section>
 
-      {/* Optional visual tiles kept for imagery */}
-      <section className="mx-auto max-w-7xl w-full px-4 pb-3">
+      {/* Category visual cards directly below respective tags */}
+      <section className="mx-auto max-w-7xl w-full px-4 pt-1 pb-4">
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
           {CATEGORIES_MAPPING.map((c) => (
             <Link
               key={c.name}
               to="/browse"
-              search={{ category: c.slug }}
+              search={c.slug === "services-skills" ? { listing_type: "service" } : { category: c.slug }}
               className="group overflow-hidden rounded-xl bg-card ring-1 ring-black/5 shadow-sm hover:shadow-md transition"
             >
               <div className="aspect-[16/8] overflow-hidden">
