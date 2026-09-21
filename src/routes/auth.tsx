@@ -4,7 +4,7 @@ import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Header, Footer } from "@/components/site-chrome";
-import { Loader2, MapPin, User, Mail, Lock, Phone, ShieldAlert, AlertCircle } from "lucide-react";
+import { Loader2, MapPin, User, Mail, Lock, Phone, ShieldAlert, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { STATIC_SUB_COUNTIES } from "@/lib/location-data";
 
 const search = z.object({ next: z.string().optional() });
@@ -457,6 +457,10 @@ function Input({
   placeholder?: string;
   icon?: React.ComponentType<{ className?: string }>;
 }) {
+  const [showPassword, setShowPassword] = useState(false);
+  const isPassword = type === "password";
+  const inputType = isPassword ? (showPassword ? "text" : "password") : type;
+
   return (
     <div className="block">
       <div className="text-sm font-semibold text-foreground mb-2">{label}</div>
@@ -465,13 +469,30 @@ function Input({
           <Icon className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/80" />
         )}
         <input
-          type={type}
+          type={inputType}
           value={value}
           required={required}
           placeholder={placeholder}
           onChange={(e) => onChange(e.target.value)}
-          className={`w-full h-12 rounded-xl border border-input bg-white outline-none focus:ring-2 focus:ring-primary text-base transition-all placeholder:text-muted-foreground/50 shadow-sm ${Icon ? "pl-12 pr-4" : "px-4"}`}
+          className={`w-full h-12 rounded-xl border border-input bg-white outline-none focus:ring-2 focus:ring-primary text-base transition-all placeholder:text-muted-foreground/50 shadow-sm ${
+            Icon ? "pl-12" : "pl-4"
+          } ${isPassword ? "pr-12" : "pr-4"}`}
         />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setShowPassword((prev) => !prev)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            title={showPassword ? "Hide password" : "Show password"}
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/70 hover:text-foreground p-1 rounded-md transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer"
+          >
+            {showPassword ? (
+              <EyeOff className="h-5 w-5" />
+            ) : (
+              <Eye className="h-5 w-5" />
+            )}
+          </button>
+        )}
       </div>
     </div>
   );
